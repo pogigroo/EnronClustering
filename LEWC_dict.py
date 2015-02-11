@@ -4,9 +4,7 @@ import datetime
 
 import pymongo
 from textblob import TextBlob
-
-month2Int = {'JANUARY': 1,
-             'FEBRUARY': 2}
+from dateutil import parser as dateparser
 
 
 def getBuckets():
@@ -22,7 +20,6 @@ def getBuckets():
         bucketdiction[bucketNumber] = "%s_%s" % (bucketName.strip(), bucketNumber)
 
     # load words to buckets
-
     fin = open(os.path.join(pathToFiles, file_words_name), 'rb')
     worddiction = collections.defaultdict(list)
     stemdiction = collections.defaultdict(list)
@@ -41,16 +38,6 @@ def getBuckets():
             workingDiction[bucketdiction[eachBucketNumber]].append(word)
 
     return {'stem': stemdiction, 'words': worddiction}
-
-
-def getDateTime(dtStr):  # "Mon, 14 May 2001 16:39:00 -0700 (PDT)"
-
-    dtSplit = dtStr.split()
-    day = int(dtSplit[1].strip())
-    month = month2Int[dtSplit[2].strip().upper()]
-    year = int(dtSplit[3].strip())
-
-    return datetime.datetime(year, month, day)
 
 
 def splitOffIndividualComms(inBody):  # split email up between individual's email and email chain
@@ -74,14 +61,14 @@ def parseDocuments(buckets):
     mc = pymongo.MongoClient()
     db = mc.enron_mail
 
-    # BAD: DB and Collection names are 'enron_mail' and 'messages'
+    # BAD practice: DB and Collection names are 'enron_mail' and 'messages'
     # for eachRecord in db.messages.find({'headers.From':'phillip.allen@enron.com'}):
 
     finalDiction = {}
     for eachRecord in db.messages.find():
         body = eachRecord['body']
         fromPerson = eachRecord['headers']['From']
-        dt = getDateTime(eachRecord['headers']['Date'])
+        dt = dateparser.parse(eachRecord['headers']['Date']).date()
 
         if fromPerson not in finalDiction:
             finalDiction[fromPerson] = {dt: collections.defaultdict(int)}
