@@ -1,154 +1,142 @@
-import os, collections, pymongo, datetime
+import os
+import collections
+import datetime
 
+import pymongo
+from textblob import TextBlob
 
-month2Int = {'JANUARY':1,
-             'FEBRUARY':2}
-
+month2Int = {'JANUARY': 1,
+             'FEBRUARY': 2}
 
 
 def getBuckets():
     file_buckets_name = 'LIWC_BUCKET_NAMES.txt'
     file_words_name = 'LIWC2007_English080730.txt'
-    pathToFiles = r"C:\Users\Eric\Dropbox (Personal)\Clustering"
-    
-    
-    
-    #load bucket names
-    
-    fin = open (os.path.join (pathToFiles, file_buckets_name),'rb')
-    bucketDiction = {}
+    pathToFiles = r"C:\Users\Eric\PycharmProjects\EnronClustering"
+
+    # load bucket names
+    fin = open(os.path.join(pathToFiles, file_buckets_name), 'rb')
+    bucketdiction = {}
     for eachLine in fin:
-        bucketNumber, bucketName = eachLine.split ('\n')[0].split('\t')
-        bucketDiction [bucketNumber] = "%s_%s"%(bucketName.strip(), bucketNumber)
-        
-    #load words to buckets
-    
-    fin = open (os.path.join (pathToFiles, file_words_name),'rb')
-    wordDiction = collections.defaultdict(list)
-    stemDiction = collections.defaultdict(list)
-    
+        bucketNumber, bucketName = eachLine.split('\n')[0].split('\t')
+        bucketdiction[bucketNumber] = "%s_%s" % (bucketName.strip(), bucketNumber)
+
+    # load words to buckets
+
+    fin = open(os.path.join(pathToFiles, file_words_name), 'rb')
+    worddiction = collections.defaultdict(list)
+    stemdiction = collections.defaultdict(list)
+
     for eachLine in fin:
-        newLine = eachLine.split ('\r\n')[0].split('\t')
+        newLine = eachLine.split('\r\n')[0].split('\t')
         word = newLine[0].lower()
-        
+
         if '*' in word:
-            word = word.split ('*')[0]
-            workingDiction = stemDiction
+            word = word.split('*')[0]
+            workingDiction = stemdiction
         else:
-            workingDiction = wordDiction    
-            
+            workingDiction = worddiction
+
         for eachBucketNumber in newLine[1:]:
-            workingDiction [bucketDiction[eachBucketNumber]].append(word)
-    
-    return {'stem':stemDiction, 'words':wordDiction} 
+            workingDiction[bucketdiction[eachBucketNumber]].append(word)
+
+    return {'stem': stemdiction, 'words': worddiction}
 
 
-def getDateTime (dtStr):# "Mon, 14 May 2001 16:39:00 -0700 (PDT)"
-    
-    dtSplit = dtStr.split ()
+def getDateTime(dtStr):  # "Mon, 14 May 2001 16:39:00 -0700 (PDT)"
+
+    dtSplit = dtStr.split()
     day = int(dtSplit[1].strip())
-    month = month2Int[dtSplit [2].strip().upper()]
+    month = month2Int[dtSplit[2].strip().upper()]
     year = int(dtSplit[3].strip())
-    
+
     return datetime.datetime(year, month, day)
-    
-    
-def splitOffIndividualComms(inBody):#split email up between individual's email and email chain
-    
+
+
+def splitOffIndividualComms(inBody):  # split email up between individual's email and email chain
+
     if 'From:' in inBody:
-        return inBody.split ('From:')[0]
-        
+        return inBody.split('From:')[0]
+
     return inBody[:10000]
-    
-def tokenize(inBody):#nltk tokenizer punkt 
-    
-    splitBySpace = inBody.split()
-    storageDiction = collections.defaultdict(int)
-    for each in splitBySpace:
-        #delete punctuation from left
-        #delete punctuation from right
-        storageDiction [word] += 1
-        
-        
-    return storageDiction
-        
-    
-    
+
+
+def tokenize(inbody):  # nltk tokenizer punkt
+
+    textbody = TextBlob(inbody)
+    storagediction = collections.defaultdict(int)
+    for word in textbody.words:
+        storagediction[word] += 1
+    return storagediction
+
 
 def parseDocuments(buckets):
-    
     mc = pymongo.MongoClient()
-    #Don't know the name of the db and collection name at this point. This needs to be fixed/changed 
-    db = mc.ENRONDB
-    
-#    for eachRecord in db.ENRONCOLLECTIONNAME.find({'headers.From':'phillip.allen@enron.com'}):
+    db = mc.enron_mail
+
+    # BAD: DB and Collection names are 'enron_mail' and 'messages'
+    # for eachRecord in db.messages.find({'headers.From':'phillip.allen@enron.com'}):
 
     finalDiction = {}
-    for eachRecord in db.ENRONCOLLECTIONNAME.find():
+    for eachRecord in db.messages.find():
         body = eachRecord['body']
         fromPerson = eachRecord['headers']['From']
-        dt = getDateTime (eachRecord['headers']['Date'])
-        
+        dt = getDateTime(eachRecord['headers']['Date'])
+
         if fromPerson not in finalDiction:
-            finalDiction [fromPerson] = {dt:collections.defaultdict(int)}
-        elif dt not in finalDiction [fromPerson]:
-            finalDiction [fromPerson][dt] = collections.defaultdict(int)            
-        
-        workingDiction = finalDiction [fromPerson][dt]
-            
+            finalDiction[fromPerson] = {dt: collections.defaultdict(int)}
+        elif dt not in finalDiction[fromPerson]:
+            finalDiction[fromPerson][dt] = collections.defaultdict(int)
+
+        workingDiction = finalDiction[fromPerson][dt]
+
         tokens = tokenize(splitOffIndividualComms(body))
-        
+
         totalWords = 0
-                
-        for eachDocToken, eachCount in tokens.iteritems():#iterating through tokens from a document
+
+        for eachDocToken, eachCount in tokens.iteritems():  # iterating through tokens from a document
             totalWords += eachCount
-            for eachStemWord, stemBuckets in buckets['stem']:#Stem processing
+            for eachStemWord, stemBuckets in buckets['stem']:  # Stem processing
                 if eachDocToken.startswith(eachStemWord):
                     for eachBucket in stemBuckets:
-                        workingDiction [eachBucket] += eachCount
-                    
-            if eachDocToken in buckets['words']:#Full word processing
-                for eachBucket in buckets['words'][eachDocToken]:
-                        workingDiction [eachBucket] += eachCount
-                        
+                        workingDiction[eachBucket] += eachCount
 
-        workingDiction ['totalWords'] += totalWords                                             
-                        
+            if eachDocToken in buckets['words']:  # Full word processing
+                for eachBucket in buckets['words'][eachDocToken]:
+                    workingDiction[eachBucket] += eachCount
+
+        workingDiction['totalWords'] += totalWords
+
     return finalDiction
-                    
-            
-def breakUpByTimeFrames (bucketCounts):
-    
-    timeFrames = [datetime.timedelta(days=90), datetime.timedelta(days = 7)]
-    
+
+
+def breakUpByTimeFrames(bucketCounts):
+    timeFrames = [datetime.timedelta(days=90), datetime.timedelta(days=7)]
+
     personLastDate = {}
-    
+
     for eachPerson, eachSubDiction in bucketCounts.iteritems():
-        personLastDate [eachPerson] = sorted(eachSubDiction.keys(), reverse=True)[0]
-        
+        personLastDate[eachPerson] = sorted(eachSubDiction.keys(), reverse=True)[0]
+
     timeframeSumDiction = {}
-    
-        
+
     for eachTimeFrame in timeFrames:
-        timeframeSumDiction [eachTimeFrame] = {}
+        timeframeSumDiction[eachTimeFrame] = {}
         for eachPerson, eachSubDiction in bucketCounts.iteritems():
             if eachPerson not in timeframeSumDiction[eachTimeFrame]:
-                timeframeSumDiction [eachTimeFrame][eachPerson] = collections.defaultdict(int)
-                
-            for eachDate, eachIndividualBucketDiction in sorted (eachSubDiction.iteritems(), reverse=True):
+                timeframeSumDiction[eachTimeFrame][eachPerson] = collections.defaultdict(int)
+
+            for eachDate, eachIndividualBucketDiction in sorted(eachSubDiction.iteritems(), reverse=True):
                 if personLastDate[eachPerson] - eachDate > eachTimeFrame:
                     break
-                #summation accross timeframe for each bucket
+                # summation accross timeframe for each bucket
                 for eachBucket, eachCount in eachIndividualBucketDiction.iteritems():
-                    timeframeSumDiction [eachTimeFrame][eachPerson][eachBucket] += eachCount
-                
-    return timeframeSumDiction        
-    
-                            
-            
+                    timeframeSumDiction[eachTimeFrame][eachPerson][eachBucket] += eachCount
+
+    return timeframeSumDiction
+
 
 if __name__ == '__main__':
-    
     buckets = getBuckets()
     bucketCounts = parseDocuments(buckets)
     breakUpByTimeFrames(bucketCounts)
