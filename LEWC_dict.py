@@ -6,6 +6,7 @@ import pymongo
 from textblob import TextBlob
 from dateutil import parser as dateparser
 
+# import json
 
 def getBuckets():
     file_buckets_name = 'LIWC_BUCKET_NAMES.txt'
@@ -17,7 +18,7 @@ def getBuckets():
     bucketdiction = {}
     for eachLine in fin:
         bucketNumber, bucketName = eachLine.split('\n')[0].split('\t')
-        bucketdiction[bucketNumber] = "%s_%s" % (bucketName.strip(), bucketNumber)
+        bucketdiction[bucketNumber] = bucketName.strip()
 
     # load words to buckets
     fin = open(os.path.join(pathToFiles, file_words_name), 'rb')
@@ -35,9 +36,8 @@ def getBuckets():
             workingDiction = worddiction
 
         for eachBucketNumber in newLine[1:]:
-            workingDiction[bucketdiction[eachBucketNumber]].append(word)
-
-    return {'stem': stemdiction, 'words': worddiction}
+            workingDiction[word].append(bucketdiction[eachBucketNumber])
+    return {'words': worddiction, 'stem': stemdiction}
 
 
 def splitOffIndividualComms(inBody):  # split email up between individual's email and email chain
@@ -75,7 +75,7 @@ def parseDocuments(buckets):
         elif dt not in finalDiction[fromPerson]:
             finalDiction[fromPerson][dt] = collections.defaultdict(int)
 
-        workingDiction = finalDiction[fromPerson][dt]
+        workingDiction = finalDiction[fromPerson][dt]  # Creates pointer to final dictionary for Person, day
 
         tokens = tokenize(splitOffIndividualComms(body))
 
@@ -98,6 +98,10 @@ def parseDocuments(buckets):
 
 
 def breakUpByTimeFrames(bucketCounts):
+    """
+
+    :rtype : dict
+    """
     timeFrames = [datetime.timedelta(days=90), datetime.timedelta(days=7)]
 
     personLastDate = {}
@@ -123,10 +127,11 @@ def breakUpByTimeFrames(bucketCounts):
     return timeframeSumDiction
 
 
-
 if __name__ == '__main__':
     buckets = getBuckets()
     bucketCounts = parseDocuments(buckets)
-    breakUpByTimeFrames(bucketCounts)
+    user_buckets_time_frames = breakUpByTimeFrames(bucketCounts)
+    # TODO serialize user_buckets_time_frames to file and/or binary r object
+
 
 
