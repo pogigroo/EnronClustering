@@ -83,7 +83,7 @@ def parseDocuments(buckets):
 
         for eachDocToken, eachCount in tokens.iteritems():  # iterating through tokens from a document
             totalWords += eachCount
-            for eachStemWord, stemBuckets in buckets['stem']:  # Stem processing
+            for eachStemWord, stemBuckets in buckets['stem'].iteritems():  # Stem processing
                 if eachDocToken.startswith(eachStemWord):
                     for eachBucket in stemBuckets:
                         workingDiction[eachBucket] += eachCount
@@ -116,11 +116,12 @@ def breakUpByTimeFrames(bucketCounts):
             for eachDate, eachIndividualBucketDiction in sorted(eachSubDiction.iteritems(), reverse=True):
                 if personLastDate[eachPerson] - eachDate > eachTimeFrame:
                     break
-                # summation accross timeframe for each bucket
+                # summation across time-frame for each bucket
                 for eachBucket, eachCount in eachIndividualBucketDiction.iteritems():
                     timeframeSumDiction[eachTimeFrame][eachPerson][eachBucket] += eachCount
 
     return timeframeSumDiction
+
 
 
 if __name__ == '__main__':
