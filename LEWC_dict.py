@@ -6,7 +6,8 @@ import pymongo
 from textblob import TextBlob
 from dateutil import parser as dateparser
 
-# import json
+import cPickle
+
 
 def getBuckets():
     file_buckets_name = 'LIWC_BUCKET_NAMES.txt'
@@ -49,8 +50,7 @@ def splitOffIndividualComms(inBody):  # split email up between individual's emai
 
 
 def tokenize(inbody):  # nltk tokenizer punkt
-
-    textbody = TextBlob(inbody)
+    textbody = TextBlob(inbody).lower()  # textblob object blob.str() ls like str.lower()
     storagediction = collections.defaultdict(int)
     for word in textbody.words:
         storagediction[word] += 1
@@ -87,14 +87,84 @@ def parseDocuments(buckets):
                 if eachDocToken.startswith(eachStemWord):
                     for eachBucket in stemBuckets:
                         workingDiction[eachBucket] += eachCount
-
+        # TODO Add code to include datetime for first and last email of the day, in addition to date, for finalDiction
             if eachDocToken in buckets['words']:  # Full word processing
                 for eachBucket in buckets['words'][eachDocToken]:
                     workingDiction[eachBucket] += eachCount
 
         workingDiction['totalWords'] += totalWords
 
+        #if len(finalDiction.keys()) > 30:
+        #    break
+
     return finalDiction
+
+
+def writeToMongo(finaldiction, dbname='LEWCtestDB', colname='users'):
+    """
+
+
+    :rtype : int
+    :type dbname: basestring
+    """
+    mc = pymongo.MongoClient()
+
+    db = mc.LEWCtestDB
+    # db = mc.eval(dbname)
+
+#    assert isinstance(db.eval(colname).insert, dict)
+    ids = db.users.insert(mongokeyfix(finaldiction))
+
+    return ids
+
+
+def mongokeyfix(keydict):
+    """
+    Creates list of dictionaries, with date objects replaced with %Y-%m-%d strings
+    :param keydict:
+    :rtype : dict
+    :return:
+    """
+    output_list = []
+
+    for key, value in keydict.iteritems():
+        for date, buckets in value.iteritems():
+            # output_list.append({"from": key, "date": date.strftime("%Y-%m-%d"), "buckets": buckets})
+            output_list.append({"from": key, "date": datetime.datetime.combine(date, datetime.time.min), "buckets": buckets})
+            # [key.replace(".", "_")] = {date.strftime("%Y-%m-%d"): buckets}
+
+    return output_list
+
+def writeToMongo2(finaldiction, dbname='LEWCtestDB', colname='users'):
+    """
+
+
+    :rtype : int
+    :type dbname: basestring
+    """
+    mc = pymongo.MongoClient()
+    # db = mc.eval(dbname)
+    db = mc.LEWCtestDB
+
+#    assert isinstance(db.eval(colname).insert, dict)
+    ids = db.timeframes.insert(mongokeyfix2(finaldiction))
+
+    return ids
+
+
+def mongokeyfix2(keydict):
+    """
+    Creates list of dictionaries, with date objects replaced with %Y-%m-%d strings
+    :param keydict:
+    :rtype : dict
+    :return:
+    """
+    output_list = []
+
+    for key, value in keydict.iteritems():
+        for person, buckets in value.iteritems():
+            output_list.append({"timeframe": key.days, "from": person, "buckets": buckets})
+    return output_list
 
 
 def breakUpByTimeFrames(bucketCounts):
@@ -129,9 +199,15 @@ def breakUpByTimeFrames(bucketCounts):
 
 if __name__ == '__main__':
     buckets = getBuckets()
+
     bucketCounts = parseDocuments(buckets)
+    writeToMongo(bucketCounts, dbname='LEWCEnron', colname='dailyuserbuckets')
+
     user_buckets_time_frames = breakUpByTimeFrames(bucketCounts)
-    # TODO serialize user_buckets_time_frames to file and/or binary r object
+    writeToMongo2(user_buckets_time_frames, dbname='LEWCEnron', colname='timeframes')
+
+    cPickle.dump(bucketCounts, open(os.path.join(r"C:\Users\Eric\PycharmProjects\EnronClustering", 'bucketcounts.p'), 'rb'))
+    cPickle.dump(user_buckets_time_frames, open(os.path.join(r"C:\Users\Eric\PycharmProjects\EnronClustering", 'time_frames.p'), 'rb'))
 
 
 
